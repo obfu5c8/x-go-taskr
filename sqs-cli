@@ -1,0 +1,98 @@
+#!/bin/bash
+
+
+QUEUE_URL="http://localhost:4566/00000000000/test-queue"
+REGION="eu-west-1"
+
+
+
+function main() {
+    CMD="$1"; shift;
+    case "$CMD" in
+    info)
+        info $@
+        ;;
+    watch)
+        watch $@
+        ;;
+    send)
+        send_messages $@
+        ;;
+    fml)
+        fml $@
+        ;;
+    esac
+}
+
+function fml() {
+    local msgBody='test'
+    
+    local bodyJson="[]"
+    for (( c=1; c<=5; c++ ))
+    do
+        bodyJson=$(jq --arg body "$msgBody" -r '. += [$body]' <<< $bodyJson)
+    done
+
+    echo $bodyJson
+}
+
+function info() {
+    local json=`awslocal sqs get-queue-attributes --queue-url $QUEUE_URL --region $REGION --attribute-names \
+        ApproximateNumberOfMessagesNotVisible   \
+        ApproximateNumberOfMessagesDelayed      \
+        ApproximateNumberOfMessages`
+
+    echo "$json"
+    # echo "NumMsgs = $(echo json | jq -r '.Attributes.ApproximateNumberOfMessages')"
+}
+
+function watch() {
+    echo ""
+    while :
+    do
+        local json=`awslocal sqs get-queue-attributes --queue-url $QUEUE_URL --region $REGION --attribute-names \
+            ApproximateNumberOfMessagesNotVisible   \
+            ApproximateNumberOfMessagesDelayed      \
+            ApproximateNumberOfMessages`
+
+        local info=$(jq -r '"Queue size: \(.Attributes.ApproximateNumberOfMessages) (\(.Attributes.ApproximateNumberOfMessagesNotVisible) leased)"' <<< $json)
+
+        printf '\r%-40s' "$info"
+        # echo -ne "\r$info"
+    done
+}
+
+function send_messages() {
+    local numMsgs=1
+    if [[ ! -z "$1" ]]; then 
+        numMsgs="$1"
+    fi
+
+    local msgBody="test"
+    if [ ! -z "$2" ]; then
+        msgBody="$2"
+    fi
+
+    local numBatches=$(( ($numMsgs + 9) / 10))
+    for (( b=0; b<$numBatches; b++)) {
+        local rem=$(( $numMsgs - (b*10) ))
+        local numLeft=$(( $rem > 10 ? 10 : $rem ))
+        local bodyJson="[]"
+        local timestamp=$(date +%s%3)
+        for (( c=0; c<$numLeft; c++ ))
+        do
+            local id="$timestamp-$(( (b*10) + c ))"
+            bodyJson=$(jq --arg body "$msgBody" --arg id "$id" \
+                 -r '. += [{"MessageBody": $body, "Id": $id}]' \
+                 <<< $bodyJson)
+        done
+
+        awslocal sqs send-message-batch --queue-url $QUEUE_URL --region $REGION \
+            --entries "$bodyJson"
+
+    }
+
+}
+
+
+main $@
