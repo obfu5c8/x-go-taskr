@@ -53,7 +53,8 @@ func main() {
 		taskrsqs.WithBatchSize(1))
 
 	// Start running one or more workers
-	taskRunner := taskrsqs.Run(ctx, 1, &workerConfig)
+	taskRunner := taskrsqs.Run(ctx, &workerConfig,
+		taskrsqs.WithNumberOfWorkers(1))
 
 	<-cancelChan
 	logger.Info().Msg("Draining workers... please wait...")

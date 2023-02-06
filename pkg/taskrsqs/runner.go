@@ -9,33 +9,51 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func Run(ctx context.Context, numWorkers int, workerConfig *WorkerConfig) Runner {
+type NewRunnerOpt func(Runner) Runner
 
+func Run(ctx context.Context, workerConfig *WorkerConfig, opts ...NewRunnerOpt) Runner {
+	runner := NewRunner(ctx, opts...)
+	runner.Start(workerConfig)
+	return runner
+}
+
+func WithNumberOfWorkers(n int) func(Runner) Runner {
+	return func(r Runner) Runner {
+		r.numWorkers = n
+		return r
+	}
+}
+
+func NewRunner(ctx context.Context, opts ...NewRunnerOpt) Runner {
 	runner := Runner{
-		ctx: ctx,
+		ctx:        ctx,
+		numWorkers: 1,
 	}
 
-	runner.Start(numWorkers, workerConfig)
+	for _, opt := range opts {
+		runner = opt(runner)
+	}
 
 	return runner
 }
 
 type Runner struct {
-	ctx     context.Context
-	workers []Worker
-	started bool
+	ctx        context.Context
+	numWorkers int
+	workers    []Worker
+	started    bool
 }
 
-func (r *Runner) Start(numWorkers int, workerConfig *WorkerConfig) {
+func (r *Runner) Start(workerConfig *WorkerConfig) {
 	if r.started {
 		panic(errors.New("runner already started. Don't call me twice!"))
 	}
 	r.started = true
-	r.workers = make([]Worker, numWorkers)
+	r.workers = make([]Worker, r.numWorkers)
 
-	log.FromContext(r.ctx).Info().Msgf("Starting %d workers", numWorkers)
+	log.FromContext(r.ctx).Info().Msgf("Starting %d workers", r.numWorkers)
 
-	for k := 0; k < numWorkers; k++ {
+	for k := 0; k < r.numWorkers; k++ {
 		ctx := contextWithLogFields(r.ctx, func(lc zerolog.Context) zerolog.Context {
 			return lc.Int("worker", k)
 		})
