@@ -1,4 +1,4 @@
-package taskrsqs
+package sqsworker
 
 import (
 	"context"

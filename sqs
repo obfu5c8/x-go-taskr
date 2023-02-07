@@ -18,14 +18,14 @@ function main() {
     send)
         send_messages $@
         ;;
-    fml)
-        fml $@
+    purge)
+        purge_queue $@
         ;;
     esac
 }
 
 function fml() {
-    local msgBody='test'
+    local msgBody='{"foo": "bar"}'
     
     local bodyJson="[]"
     for (( c=1; c<=5; c++ ))
@@ -88,11 +88,15 @@ function send_messages() {
         done
 
         awslocal sqs send-message-batch --queue-url $QUEUE_URL --region $REGION \
-            --entries "$bodyJson"
+            --entries "$bodyJson" &
 
     }
 
 }
 
+
+function purge_queue {
+    awslocal sqs purge-queue --queue-url $QUEUE_URL --region $REGION    
+}
 
 main $@

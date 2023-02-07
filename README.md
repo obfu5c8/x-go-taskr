@@ -1,3 +1,3 @@
 # Taskr
 
-WIP Concept. Have a look at `examples/sqs/main.go`
+WIP Concept. Have a look at `examples/default/main.go`

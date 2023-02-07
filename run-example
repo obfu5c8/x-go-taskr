@@ -1,3 +1,3 @@
 #!/bin/bash
 
-godotenv -f .env go run -race ./examples/sqs/. $@
+godotenv -f .env go run -race ./examples/default/. $@
