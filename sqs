@@ -1,7 +1,7 @@
 #!/bin/bash
 
-
-QUEUE_URL="http://localhost:4566/00000000000/test-queue"
+QUEUE_NAME="test-queue"
+QUEUE_URL="http://localhost:4566/00000000000/$QUEUE_NAME"
 REGION="eu-west-1"
 
 
@@ -9,6 +9,9 @@ REGION="eu-west-1"
 function main() {
     CMD="$1"; shift;
     case "$CMD" in
+    setup)
+        setup $@
+        ;;
     info)
         info $@
         ;;
@@ -24,16 +27,9 @@ function main() {
     esac
 }
 
-function fml() {
-    local msgBody='{"foo": "bar"}'
-    
-    local bodyJson="[]"
-    for (( c=1; c<=5; c++ ))
-    do
-        bodyJson=$(jq --arg body "$msgBody" -r '. += [$body]' <<< $bodyJson)
-    done
-
-    echo $bodyJson
+function setup() {
+    echo "Creating SQS queue $QUEUE_NAME in $REGION"
+    awslocal sqs create-queue --queue-name $QUEUE_NAME --region $REGION
 }
 
 function info() {

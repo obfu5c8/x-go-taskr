@@ -35,6 +35,7 @@ type Worker struct {
 }
 
 var ErrNoNewMessages = errors.New("no new messages")
+var ErrShutdownRequested = errors.New("shutdown requested")
 
 func (w *Worker) Context() context.Context {
 	return w.ctx
@@ -87,7 +88,7 @@ iteration_loop:
 	for true {
 		select {
 		case <-w.drainChan:
-			log.FromContext(w.ctx).Info().Msg("Drain received, halting iterations")
+			log.FromContext(w.ctx).Debug().Msg("Drain received, halting iterations")
 			break iteration_loop
 		default:
 			nIterations++
@@ -134,6 +135,12 @@ func (w *Worker) iterate(ctx context.Context) error {
 		// We didn't get any messages. Give up
 		logger.Debug().Msg("No messages received")
 		return ErrNoNewMessages
+	}
+
+	// Option to bail out early if a shutdown has been requested
+	if !w.Running() {
+		log.FromContext(ctx).Debug().Msg("Shutdown requested, aborting iteration")
+		return ErrShutdownRequested
 	}
 
 	// Now we have our batch of messages, we need do two things in parallel

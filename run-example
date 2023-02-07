@@ -1,3 +1,12 @@
 #!/bin/bash
 
-godotenv -f .env go run -race ./examples/default/. $@
+EXAMPLE="$1"
+if [ -z "$EXAMPLE" ]; then 
+    echo "usage: ./run-example <example>"
+    echo "  e.g. ./run-example sqs"
+    exit 0
+fi
+
+cd ./examples/$EXAMPLE
+
+godotenv -f .env go run -race ./cmd $@

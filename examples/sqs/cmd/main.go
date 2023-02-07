@@ -15,12 +15,22 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/caarlos0/env/v7"
 )
+
+type Config struct {
+	Env             string `env:"ENV" envDefault:"local"`
+	SQSQueueUrl     string `env:"SQS_QUEUE_URL"`
+	NumWorkers      int    `env:"NUM_WORKERS"`
+	WorkerBatchSize int    `env:"WORKER_BATCH_SIZE"`
+}
 
 func main() {
 
-	// var NUM_WORKERS = 1
-	var SQS_QUEUE_URL = "http://localhost:4566//queue/eu-west-1/000000000000/test-queue"
+	c := Config{}
+	if err := env.Parse(&c); err != nil {
+		log.Fatalf("unable to parse config: %v", err)
+	}
 
 	logger, ctx := telemetry.MustInitFromEnv()
 	defer telemetry.Close()
@@ -32,20 +42,20 @@ func main() {
 
 	// Set up the AWS client
 	sqsClient := mustCreateSQSClient(ctx)
-	queueUrl := SQS_QUEUE_URL
+	queueUrl := c.SQSQueueUrl
 
 	// The handler is what processes individual messages
 	handler := MyHandler{}
 
 	// Worker definition describes the parameters for any workers we spawn
 	workerDef := sqsworker.NewDefinition(sqsClient, queueUrl, handler,
-		sqsworker.WithBatchSize(10),
+		sqsworker.WithBatchSize(c.WorkerBatchSize),
 		sqsworker.WithInitialVisibilityTimeout(time.Second*30),
 		sqsworker.WithExtendedVisibilityTimeout(time.Second*15),
 		sqsworker.WithVisibilityTimeoutGraceTime(time.Second*10))
 
 	// Runner manages the lifecycle of workers
-	runner := sqsworker.Launch(ctx, 10, &workerDef)
+	runner := sqsworker.Launch(ctx, c.NumWorkers, &workerDef)
 
 	// Wait for signal to exit
 	<-shutdownChan
