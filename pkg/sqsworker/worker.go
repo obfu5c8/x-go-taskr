@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/WeTransfer/x-go-taskr/pkg/worker"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/rs/zerolog/log"
@@ -24,8 +25,7 @@ type Worker struct {
 	doneChan  chan bool
 }
 
-var ErrNoNewMessages = errors.New("no new messages")
-var ErrShutdownRequested = errors.New("shutdown requested")
+var _ worker.Worker = &Worker{}
 
 func (w *Worker) Context() context.Context {
 	return w.ctx
@@ -151,10 +151,13 @@ func (w *Worker) iterate(ctx context.Context) error {
 	// Spawn handler routines for each message in the background
 	for _, msg := range msgs {
 		go func(msg types.Message) {
-			result := w.Def.Handler.ExecuteTask(ctx, msg)
-			log.Ctx(ctx).Info().
-				Err(result).
+			execCtx := log.Ctx(ctx).With().
 				Str("id", *msg.MessageId).
+				Logger().WithContext(ctx)
+
+			result := w.Def.Handler.ExecuteTask(execCtx, msg)
+			log.Ctx(execCtx).Info().
+				Err(result).
 				Bool("success", result == nil).
 				Msg("Message processed")
 			handlerResultC <- dispatchResult{

@@ -7,3 +7,7 @@ import (
 
 type Handler = worker.Handler[types.Message]
 type HandlerMiddleware = worker.HandlerMiddleware[types.Message]
+
+func HandlerWithMiddleware(handler Handler, middleware ...HandlerMiddleware) Handler {
+	return worker.HandlerWithMiddleware(handler, middleware...)
+}

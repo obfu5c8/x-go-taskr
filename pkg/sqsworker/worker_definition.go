@@ -45,7 +45,7 @@ func (d WorkerDefinition) CreateWorker() worker.Worker {
 }
 
 // Create a new WorkerDefinition with default values populated
-func NewDefinition(sqsClient *sqs.Client, queueUrl string, handler Handler, options ...WorkerDefinitionOption) WorkerDefinition {
+func Define(sqsClient *sqs.Client, queueUrl string, handler Handler, options ...WorkerDefinitionOption) WorkerDefinition {
 	def := WorkerDefinition{
 		SQSClient:                  sqsClient,
 		Handler:                    handler,

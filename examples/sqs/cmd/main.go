@@ -7,9 +7,12 @@ import (
 
 	telemetry "github.com/WeTransfer/go-telemetry"
 	"github.com/WeTransfer/x-go-taskr/pkg/k8ssignals"
-	"github.com/WeTransfer/x-go-taskr/pkg/sqsclient"
+	"github.com/WeTransfer/x-go-taskr/pkg/redisam1"
 	"github.com/WeTransfer/x-go-taskr/pkg/sqsworker"
 	"github.com/WeTransfer/x-go-taskr/pkg/worker"
+	"github.com/WeTransfer/x-go-taskr/pkg/zerologx"
+	zerologaws "github.com/WeTransfer/x-go-taskr/pkg/zerologx/aws"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -40,6 +43,7 @@ func main() {
 	ctx = logger.WithContext(ctx)
 
 	// Listen for SIGTERM or SIGINT to start a graceful shutdown
+	// SIGKILL will cancel the context immediately too (does this matter?)
 	ctx, shutdownChan := k8ssignals.WithShutdownSignals(ctx)
 
 	// Set up the AWS client
@@ -47,10 +51,13 @@ func main() {
 	queueUrl := c.SQSQueueUrl
 
 	// The handler is what processes individual messages
-	handler := MyHandler{}
+	handler := sqsworker.HandlerWithMiddleware(
+		MyHandler{},
+		atMostOnceProcessingProtectionMiddleware(ctx),
+	)
 
 	// Worker definition describes the parameters for any workers we spawn
-	workerDef := sqsworker.NewDefinition(sqsClient, queueUrl, handler,
+	workerDef := sqsworker.Define(sqsClient, queueUrl, handler,
 		sqsworker.WithBatchSize(c.WorkerBatchSize),
 		sqsworker.WithInitialVisibilityTimeout(time.Second*30),
 		sqsworker.WithExtendedVisibilityTimeout(time.Second*15),
@@ -58,7 +65,7 @@ func main() {
 
 	// Runner manages the lifecycle of workers
 	runner, _ := worker.Launch(ctx, &workerDef,
-		worker.WithInstances(2))
+		worker.WithInstances(c.NumWorkers))
 
 	// Wait for signal to exit
 	<-shutdownChan
@@ -69,6 +76,16 @@ func main() {
 	runner.Shutdown()
 	logger.Info().Dur("drain_time", time.Since(drainStartTime)).Msg("Shutdown Complete")
 
+}
+
+func atMostOnceProcessingProtectionMiddleware(ctx context.Context) sqsworker.HandlerMiddleware {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+	redis.SetLogger(zerologx.GoRedisLogger{})
+	return redisam1.Middleware(rdb)
 }
 
 func mustCreateSQSClient(ctx context.Context) *sqs.Client {
@@ -86,7 +103,7 @@ func mustCreateSQSClient(ctx context.Context) *sqs.Client {
 		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("dummy", "dummy", "dummy")),
 		awsconfig.WithRegion("eu-west-1"),
 		// Try a logging adapter
-		sqsclient.WithLoggingMiddleware(),
+		config.WithLogger(zerologaws.Logger{}),
 		config.WithClientLogMode(aws.LogRetries|aws.LogRequestWithBody|aws.LogResponseWithBody))
 
 	if err != nil {
