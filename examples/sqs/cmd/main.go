@@ -9,6 +9,7 @@ import (
 	"github.com/WeTransfer/x-go-taskr/pkg/k8ssignals"
 	"github.com/WeTransfer/x-go-taskr/pkg/sqsclient"
 	"github.com/WeTransfer/x-go-taskr/pkg/sqsworker"
+	"github.com/WeTransfer/x-go-taskr/pkg/worker"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -35,7 +36,8 @@ func main() {
 	logger, ctx := telemetry.MustInitFromEnv()
 	defer telemetry.Close()
 	// Grubby workaround to add caller to logs in dev. This should be added to WeTransfer/go-telemetry
-	ctx = logger.With().Caller().Logger().WithContext(ctx)
+	logger = logger.With().Caller().Logger()
+	ctx = logger.WithContext(ctx)
 
 	// Listen for SIGTERM or SIGINT to start a graceful shutdown
 	ctx, shutdownChan := k8ssignals.WithShutdownSignals(ctx)
@@ -55,16 +57,17 @@ func main() {
 		sqsworker.WithVisibilityTimeoutGraceTime(time.Second*10))
 
 	// Runner manages the lifecycle of workers
-	runner := sqsworker.Launch(ctx, c.NumWorkers, &workerDef)
+	runner, _ := worker.Launch(ctx, &workerDef,
+		worker.WithInstances(2))
 
 	// Wait for signal to exit
 	<-shutdownChan
-	logger.Info().Msg("Draining workers... please wait...")
+	logger.Info().Msg("Shutting down... please wait...")
 
 	// Drain all the workers gracefully
 	drainStartTime := time.Now()
-	runner.Stop()
-	logger.Info().Dur("draintime", time.Since(drainStartTime)).Msg("All task workers drained")
+	runner.Shutdown()
+	logger.Info().Dur("drain_time", time.Since(drainStartTime)).Msg("Shutdown Complete")
 
 }
 

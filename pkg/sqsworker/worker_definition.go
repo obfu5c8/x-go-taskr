@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/WeTransfer/x-go-taskr/pkg/worker"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 )
@@ -33,6 +34,14 @@ type WorkerDefinition struct {
 	WaitTime time.Duration
 	// Passed to SQS client ReceiveMessage call
 	MessageAttributeNames []string
+}
+
+var _ worker.WorkerFactory = &WorkerDefinition{}
+
+func (d WorkerDefinition) CreateWorker() worker.Worker {
+	return &Worker{
+		Def: &d,
+	}
 }
 
 // Create a new WorkerDefinition with default values populated

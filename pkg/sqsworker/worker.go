@@ -7,20 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/WeTransfer/go-telemetry/log"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
-	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
-
-func NewWorker(def *WorkerDefinition) Worker {
-
-	worker := Worker{
-		Def: def,
-	}
-
-	return worker
-}
 
 type Worker struct {
 	Def *WorkerDefinition
@@ -55,14 +45,14 @@ func (w *Worker) Running() bool {
 
 // Drain any running worker tasks and exit
 // This method will block until the worker is shut down
-func (w *Worker) Drain() {
+func (w *Worker) Shutdown() {
 	if !w.Running() {
 		// Already stopped, do nothing
 		return
 	}
-	log.From(w).Debug().Msg("Stop called")
+	log.Ctx(w.ctx).Debug().Msg("Stop called")
 	w.drainChan <- true
-	log.From(w).Debug().Msg("Drain complete")
+	log.Ctx(w.ctx).Debug().Msg("Drain complete")
 	<-w.doneChan
 }
 
@@ -88,7 +78,7 @@ iteration_loop:
 	for true {
 		select {
 		case <-w.drainChan:
-			log.FromContext(w.ctx).Debug().Msg("Drain received, halting iterations")
+			log.Ctx(w.ctx).Debug().Msg("Drain received, halting iterations")
 			break iteration_loop
 		default:
 			nIterations++
@@ -97,26 +87,26 @@ iteration_loop:
 			}
 
 			// Add iteration id to logging context
-			ctx := contextWithLogFields(w.ctx, func(lc zerolog.Context) zerolog.Context {
-				return lc.Uint64("wit", nIterations)
-			})
+			ctx := log.Ctx(w.ctx).With().
+				Uint64("wit", nIterations).
+				Logger().WithContext(w.ctx)
 
 			if err := w.iterate(ctx); err != nil {
 				if !errors.Is(err, ErrNoNewMessages) {
-					log.From(w).Err(err).Msg("Iteration failed")
+					log.Ctx(ctx).Err(err).Msg("Iteration failed")
 					// time.Sleep(time.Second * 1) // Just to slow down devtime runaway loops of death
 				}
 			}
 		}
 	}
 
-	log.FromContext(w.ctx).Debug().Msg("Iteration loop broken, worker is done")
+	log.Ctx(w.ctx).Debug().Msg("Iteration loop broken, worker is done")
 	w.doneChan <- true
 }
 
 func (w *Worker) iterate(ctx context.Context) error {
 
-	logger := log.FromContext(ctx)
+	logger := log.Ctx(ctx)
 
 	logger.Debug().Msg("Starting iteration")
 
@@ -139,7 +129,7 @@ func (w *Worker) iterate(ctx context.Context) error {
 
 	// Option to bail out early if a shutdown has been requested
 	if !w.Running() {
-		log.FromContext(ctx).Debug().Msg("Shutdown requested, aborting iteration")
+		log.Ctx(ctx).Debug().Msg("Shutdown requested, aborting iteration")
 		return ErrShutdownRequested
 	}
 
@@ -162,7 +152,7 @@ func (w *Worker) iterate(ctx context.Context) error {
 	for _, msg := range msgs {
 		go func(msg types.Message) {
 			result := w.Def.Handler.ExecuteTask(ctx, msg)
-			log.FromContext(ctx).Info().
+			log.Ctx(ctx).Info().
 				Err(result).
 				Str("id", *msg.MessageId).
 				Bool("success", result == nil).
@@ -196,7 +186,7 @@ func (w *Worker) iterate(ctx context.Context) error {
 		}
 	}
 
-	log.FromContext(ctx).Debug().Msg("Dispatch complete, returning results")
+	log.Ctx(ctx).Debug().Msg("Dispatch complete, returning results")
 
 	// Release/delete messages
 	// No point hanging around while these messages are deleted,
@@ -222,7 +212,7 @@ func (w *Worker) deleteMessages(ctx context.Context, messages []types.Message) {
 		}
 		ids[i] = *msg.MessageId
 	}
-	log.FromContext(ctx).Debug().Interface("message_ids", ids).Msgf("Got %d messages to delete", len(messages))
+	log.Ctx(ctx).Debug().Interface("message_ids", ids).Msgf("Got %d messages to delete", len(messages))
 
 	delReq := &sqs.DeleteMessageBatchInput{
 		Entries:  entries,
@@ -231,14 +221,14 @@ func (w *Worker) deleteMessages(ctx context.Context, messages []types.Message) {
 
 	_, err := w.Def.SQSClient.DeleteMessageBatch(w.ctx, delReq)
 	if err != nil {
-		log.FromContext(ctx).Err(err).Msg("Message delete failed despite successful processing")
+		log.Ctx(ctx).Err(err).Msg("Message delete failed despite successful processing")
 	}
 }
 
 // Extend visibilityPeriod lease for a batch of messages
 func (w *Worker) extendMessageLeases(ctx context.Context, messages []types.Message) {
-	log.FromContext(ctx).Debug().Dur("by", w.Def.ExtendedVisibilityTimeout).Msg("Extending message lease time")
-	log.FromContext(ctx).Warn().Msg("Message lease extension not implemented")
+	log.Ctx(ctx).Debug().Dur("by", w.Def.ExtendedVisibilityTimeout).Msg("Extending message lease time")
+	log.Ctx(ctx).Warn().Msg("Message lease extension not implemented")
 }
 
 func createReceiveMessageInput(w *Worker) *sqs.ReceiveMessageInput {
