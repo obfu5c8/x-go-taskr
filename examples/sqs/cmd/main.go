@@ -6,12 +6,12 @@ import (
 	"time"
 
 	telemetry "github.com/WeTransfer/go-telemetry"
-	"github.com/WeTransfer/x-go-taskr/pkg/k8ssignals"
-	"github.com/WeTransfer/x-go-taskr/pkg/redisam1"
+	"github.com/WeTransfer/x-go-taskr/pkg/middleware/redisam1"
+	"github.com/WeTransfer/x-go-taskr/pkg/misc/k8ssignals"
+	"github.com/WeTransfer/x-go-taskr/pkg/misc/zerologx"
+	zerologaws "github.com/WeTransfer/x-go-taskr/pkg/misc/zerologx/aws"
 	"github.com/WeTransfer/x-go-taskr/pkg/sqsworker"
 	"github.com/WeTransfer/x-go-taskr/pkg/worker"
-	"github.com/WeTransfer/x-go-taskr/pkg/zerologx"
-	zerologaws "github.com/WeTransfer/x-go-taskr/pkg/zerologx/aws"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -38,9 +38,11 @@ func main() {
 
 	logger, ctx := telemetry.MustInitFromEnv()
 	defer telemetry.Close()
-	// Grubby workaround to add caller to logs in dev. This should be added to WeTransfer/go-telemetry
-	logger = logger.With().Caller().Logger()
-	ctx = logger.WithContext(ctx)
+	// Workaround to add caller to logs in dev. This should be added to WeTransfer/go-telemetry
+	if c.Env == "local" {
+		logger = logger.With().Caller().Logger()
+		ctx = logger.WithContext(ctx)
+	}
 
 	// Listen for SIGTERM or SIGINT to start a graceful shutdown
 	// SIGKILL will cancel the context immediately too (does this matter?)
