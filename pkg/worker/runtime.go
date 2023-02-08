@@ -31,6 +31,7 @@ type launchOptions struct {
 
 type LaunchOption = func(launchOptions) launchOptions
 
+// Set the number of instances of a Worker that will be launched
 func WithInstances(n int) LaunchOption {
 	return func(lo launchOptions) launchOptions {
 		lo.NumWorkers = n
@@ -38,6 +39,7 @@ func WithInstances(n int) LaunchOption {
 	}
 }
 
+// Launch one or more instances of a worker to run in the background
 func (r *Runtime) Launch(ctx context.Context, workerFactory WorkerFactory, opts ...LaunchOption) error {
 
 	cfg := util.ApplyOpts(opts, launchOptions{
@@ -66,6 +68,7 @@ func (r *Runtime) Launch(ctx context.Context, workerFactory WorkerFactory, opts 
 	return nil
 }
 
+// Gracefully shut down all workers, blocking until they have successfully terminated
 func (r *Runtime) Shutdown() {
 	if err := r.state.TrySet(StateDraining); err != nil {
 		// Although the state change failed, it's ok because

@@ -7,7 +7,7 @@ import (
 
 	telemetry "github.com/WeTransfer/go-telemetry"
 	"github.com/WeTransfer/x-go-taskr/pkg/middleware/redisam1"
-	"github.com/WeTransfer/x-go-taskr/pkg/misc/k8ssignals"
+	"github.com/WeTransfer/x-go-taskr/pkg/misc/shutdown"
 	"github.com/WeTransfer/x-go-taskr/pkg/misc/zerologx"
 	zerologaws "github.com/WeTransfer/x-go-taskr/pkg/misc/zerologx/aws"
 	"github.com/WeTransfer/x-go-taskr/pkg/sqsworker"
@@ -23,10 +23,11 @@ import (
 )
 
 type Config struct {
-	Env             string `env:"ENV" envDefault:"local"`
-	SQSQueueUrl     string `env:"SQS_QUEUE_URL"`
-	NumWorkers      int    `env:"NUM_WORKERS"`
-	WorkerBatchSize int    `env:"WORKER_BATCH_SIZE"`
+	Env                      string        `env:"ENV" envDefault:"local"`
+	SQSQueueUrl              string        `env:"SQS_QUEUE_URL"`
+	NumWorkers               int           `env:"NUM_WORKERS"`
+	WorkerBatchSize          int           `env:"WORKER_BATCH_SIZE"`
+	GracefulShutdownDeadline time.Duration `env:"GRACEFUL_SHUTDOWN_DEADLINE_SECONDS"`
 }
 
 func main() {
@@ -46,7 +47,7 @@ func main() {
 
 	// Listen for SIGTERM or SIGINT to start a graceful shutdown
 	// SIGKILL will cancel the context immediately too (does this matter?)
-	ctx, shutdownChan := k8ssignals.WithShutdownSignals(ctx)
+	ctx, waitForShutdownSignal := shutdown.ListenerWithDeadline(ctx, c.GracefulShutdownDeadline)
 
 	// Set up the AWS client
 	sqsClient := mustCreateSQSClient(ctx)
@@ -70,13 +71,14 @@ func main() {
 		worker.WithInstances(c.NumWorkers))
 
 	// Wait for signal to exit
-	<-shutdownChan
+	<-waitForShutdownSignal
 	logger.Info().Msg("Shutting down... please wait...")
 
 	// Drain all the workers gracefully
 	drainStartTime := time.Now()
 	runner.Shutdown()
-	logger.Info().Dur("drain_time", time.Since(drainStartTime)).Msg("Shutdown Complete")
+	logger.Info().Dur("drain_time", time.Since(drainStartTime)).
+		Msg("Shutdown Complete")
 
 }
 

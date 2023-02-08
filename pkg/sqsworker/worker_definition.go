@@ -97,42 +97,42 @@ func WithBatchSize(batchSize int) WorkerDefinitionOption {
 }
 
 // Sets the visibility timeout to set when retrieving messages
-func WithInitialVisibilityTimeout(timeout time.Duration) WorkerDefinitionOption {
-	if timeout < 0 || timeout > time.Hour*12 {
+func WithInitialVisibilityTimeout(d time.Duration) WorkerDefinitionOption {
+	if d < 0 || d > time.Hour*12 {
 		panic(errors.New("Maximum supported VisibilityTimeout is 12 hours"))
 	}
 	return func(wd WorkerDefinition) WorkerDefinition {
-		wd.InitialVisibilityTimeout = timeout
+		wd.InitialVisibilityTimeout = d
 		return wd
 	}
 }
 
 // Sets the visibility timeout to set when extending message leases
-func WithExtendedVisibilityTimeout(timeout time.Duration) WorkerDefinitionOption {
-	if timeout < 0 || timeout > time.Hour*12 {
+func WithExtendedVisibilityTimeout(d time.Duration) WorkerDefinitionOption {
+	if d < 0 || d > time.Hour*12 {
 		panic(errors.New("Maximum supported VisibilityTimeout is 12 hours"))
 	}
 	return func(wd WorkerDefinition) WorkerDefinition {
-		wd.ExtendedVisibilityTimeout = timeout
+		wd.ExtendedVisibilityTimeout = d
 		return wd
 	}
 }
 
 // Sets the VisibilityTimeoutGraceTime
-func WithVisibilityTimeoutGraceTime(timeout time.Duration) WorkerDefinitionOption {
+func WithVisibilityTimeoutGraceTime(d time.Duration) WorkerDefinitionOption {
 	return func(wd WorkerDefinition) WorkerDefinition {
-		wd.VisibilityTimeoutGraceTime = timeout
+		wd.VisibilityTimeoutGraceTime = d
 		return wd
 	}
 }
 
 // Sets the WaitTime
-func WithWaitTime(waitTime time.Duration) WorkerDefinitionOption {
-	if waitTime < 0 || waitTime > time.Second*20 {
+func WithWaitTime(d time.Duration) WorkerDefinitionOption {
+	if d < 0 || d > time.Second*20 {
 		panic(errors.New("Maximum WaitTime is 20 seconds"))
 	}
 	return func(wd WorkerDefinition) WorkerDefinition {
-		wd.WaitTime = waitTime
+		wd.WaitTime = d
 		return wd
 	}
 }
